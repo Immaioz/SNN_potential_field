@@ -41,3 +41,5 @@ class SAE(nn.Module):
         mem = torch.mean(mem,axis=0)
         mse = torch.nn.MSELoss()
         return mse(sample,mem).item()
+    
+

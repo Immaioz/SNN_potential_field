@@ -41,12 +41,25 @@ class Simulator:
 
 
     def run(self):
-        for run in range(self.num_run):
-            self.single_run(run)
+        pioneer_positions_all = []
+        block_positions_all = []
+        goal_positions_all = []
+        preds_all = []
+        thresholds_all = []
+        for run in tqdm(range(self.num_run), desc="Simulation Runs"):
+        # for run in range(self.num_run):
+            # self.single_run(run)
+            pioneer_positions, block_positions, goal_position, preds = self.single_run(run)
+            pioneer_positions_all.append(pioneer_positions)
+            block_positions_all.append(block_positions)
+            goal_positions_all.append(goal_position)
+            preds_all.append(preds)
+        return pioneer_positions_all, block_positions_all, goal_positions_all, preds_all, thresholds_all
 
     def single_run(self, run):
         self.init_scene()
         preds = []
+        thresholds = []
         pioneer_position, goal_position, block_positions = self.place_objects(run)
         frame_id = 0
         self.sim.setJointTargetVelocity(self.left_motor, 0)
@@ -86,14 +99,16 @@ class Simulator:
                 # print(f"shape sensor : {X_sensor_tensor.shape}")
                 X_total = torch.concat((X_img_tensor, X_sensor_tensor), axis=-1)
                 error = self.model.compute_reconstruction_error(X_total.unsqueeze(0))
-                preds.append(PF.mod_thr(self.THR_base,error))        
+                if error > self.THR_base:
+                    preds.append(1)
+                    PF.mod_thr(1) #increase THR
+                else:
+                    preds.append(0)
+                    PF.mod_thr(0) #decrease THR
+                thresholds.append(PF.THR)
         self.sim.stopSimulation()
         time.sleep(2)
-
-        # self.plot_ano(pioneer_positions, block_positions, goal_position, preds)
-
-    def predict_model(self):
-        pass
+        return pioneer_positions, block_positions, goal_position, np.array(preds), np.array(thresholds)
 
 
     def init_csv(self, log_filename, block_positions):
@@ -104,7 +119,6 @@ class Simulator:
 
     def update_csv(self, log_filename, run, frame_id, pioneer_position, goal_position, v_l, v_r, sensors_vals, block_positions):
         black_positions_array = np.array(block_positions)
-        print()
         row = [run + 1, frame_id, pioneer_position[0], pioneer_position[1], goal_position[0], goal_position[1], v_l.item(), v_r.item()] + sensors_vals + list(black_positions_array[:,0]) + list(black_positions_array[:,1])
         with open(log_filename, 'a', newline='') as f:
             writer = csv.writer(f)
@@ -134,7 +148,6 @@ class Simulator:
 
 
     def place_objects(self, run):
-
         np.random.seed(self.seed[run])
         floor_pos = self.sim.getObjectPosition(self.floor_handle, -1)
 
@@ -185,70 +198,6 @@ class Simulator:
             if np.hypot(x - px, y - py) < min_dist:
                 return False
         return True
-    
-
-    def plot_tot(self, pioneer_positions, block_positions, goal_position):
-
-        plt.figure(figsize=(10, 10))
-        plt.title("Traiettorie Pioneer con goal e blocchi")
-        plt.xlabel("X [m]")
-        plt.ylabel("Y [m]")
-        plt.grid(True)
-        plt.axis('equal')
-        block_size = 1.0
-        plt.xticks(np.arange(8.5, -8.5, -1))
-        plt.yticks(np.arange(8.5, -8.5, -1))
-        plt.plot(pioneer_positions[0][0], pioneer_positions[0][1] , 'ro', markersize=12, label='Start')
-
-        x_path = [pos[0] for pos in pioneer_positions[1:]]
-        y_path = [pos[1] for pos in pioneer_positions[1:]]
-        plt.plot(x_path, y_path, '-', label='Path')
-        # Goal
-        plt.plot(goal_position[0], goal_position[1] , 'go', markersize=12, label='Goal')
-
-        for i in range(len(block_positions)):
-                x, y = block_positions[i]
-                rect = plt.Rectangle((x - block_size/2, y - block_size/2), block_size, block_size,
-                                linewidth=1, edgecolor='r', facecolor='none')
-                plt.gca().add_patch(rect)
-                plt.plot(x, y, 'r.', markersize=5)
-        plt.grid(False)
-        plt.legend()
-        plt.show()
-
-    def plot_ano(self, pioneer_positions, block_positions, goal_position, preds):
-
-            plt.figure(figsize=(10, 10))
-            plt.title("Traiettorie Pioneer con goal e blocchi")
-            plt.xlabel("X [m]")
-            plt.ylabel("Y [m]")
-            plt.grid(True)
-            plt.axis('equal')
-            block_size = 1.0
-            plt.xticks(np.arange(8.5, -8.5, -1))
-            plt.yticks(np.arange(8.5, -8.5, -1))
-            plt.plot(pioneer_positions[0][0], pioneer_positions[1][0] , 'ro', markersize=12, label='Start')
-
-            x_path = pioneer_positions[0][:]
-            y_path = pioneer_positions[1][:]
-            plt.plot(x_path, y_path, '-', label='Path')
-            anom_idx = np.where(preds[:] == 1)[0]  # attenzione a sincronizzare con x_path/y_path
-            plt.plot(x_path[anom_idx], y_path[anom_idx], 'ro', label='Anomalie')
-            
-            # Goal
-            plt.plot(goal_position[0][0], goal_position[1][0] , 'go', markersize=12, label='Goal')
-            
-
-
-            for i in range(len(block_positions)):
-                    x, y = block_positions[i]
-                    rect = plt.Rectangle((x - block_size/2, y - block_size/2), block_size, block_size,
-                                    linewidth=1, edgecolor='r', facecolor='none')
-                    plt.gca().add_patch(rect)
-                    plt.plot(x, y, 'r.', markersize=5)
-            plt.grid(False)
-            plt.legend()
-            plt.show()
 
 
 class PotentialField:
@@ -259,14 +208,12 @@ class PotentialField:
         self.KP_rot = KP_rot
         self.KP_fwd = KP_fwd
 
-    def mod_thr(self, base_value, error):
-        print(f"THR: {base_value}, Error: {error}")
-        if error > base_value:
-            return 1
-        else:
-            return 0
-
-        # self.THR = base_value + error
+    def mod_thr(self, mode):
+        if mode == 1:  # increase THR
+            self.THR += 0.4
+        elif mode == 0:  # decrease THR
+            self.THR = max(0.1, self.THR - 0.2)
+        return self.THR
 
     def attractive_force(self, robot_x, robot_y, goal_x, goal_y):
         dx = goal_x - robot_x
