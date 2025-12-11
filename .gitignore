@@ -1,0 +1,10 @@
+__pycache__/
+esp_frames/*
+OLD/*
+simulation_data/*
+logfile.csv
+plot_traj.py
+*.pth
+*.npy
+*.zip
+output/*
