@@ -1,5 +1,6 @@
 
 from simulator import Simulator
+from utils import utils
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 import time
 import csv
@@ -8,14 +9,17 @@ import numpy as np
 import cv2
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-
 import argparse
 import os
+import requests
+import time
+from config import BOT_TOKEN, CHAT_ID
 
-from utils import utils
 
-
-
+def send_telegram(msg):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": msg}
+    requests.post(url, data=payload)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -72,7 +76,7 @@ def main():
         anomalies = np.bincount(preds[0])[-1].item()
         normal = np.bincount(preds[0])[0].item()
         msg = f"Run {i} completata con {anomalies} anomalie su {normal+anomalies} totali"
-        # send_telegram(msg)
+        send_telegram(msg)
 
 if __name__ == "__main__":
     main()
