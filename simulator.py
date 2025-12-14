@@ -46,20 +46,24 @@ class Simulator:
         goal_positions_all = []
         preds_all = []
         thresholds_all = []
-        for run in tqdm(range(self.num_run), desc="Simulation Runs"):
+        speeds_all = []
+        # for run in tqdm(range(self.num_run), desc="Simulation Runs"):
         # for run in range(self.num_run):
             # self.single_run(run)
-            pioneer_positions, block_positions, goal_position, preds = self.single_run(run)
-            pioneer_positions_all.append(pioneer_positions)
-            block_positions_all.append(block_positions)
-            goal_positions_all.append(goal_position)
-            preds_all.append(preds)
-        return pioneer_positions_all, block_positions_all, goal_positions_all, preds_all, thresholds_all
+        pioneer_positions, block_positions, goal_position, preds, thresholds, speeds = self.single_run(self.num_run)
+        pioneer_positions_all.append(pioneer_positions)
+        block_positions_all.append(block_positions)
+        goal_positions_all.append(goal_position)
+        preds_all.append(preds)
+        thresholds_all.append(thresholds)
+        speeds_all.append(speeds)
+        return pioneer_positions_all, block_positions_all, goal_positions_all, preds_all, thresholds_all, speeds_all
 
     def single_run(self, run):
         self.init_scene()
         preds = []
         thresholds = []
+        speeds = []
         pioneer_position, goal_position, block_positions = self.place_objects(run)
         frame_id = 0
         self.sim.setJointTargetVelocity(self.left_motor, 0)
@@ -72,17 +76,18 @@ class Simulator:
         frame_dir = os.path.join(self.save_path, f"frames_run{run + 1}")
         os.makedirs(frame_dir, exist_ok=True)
       
-        PF = PotentialField(K_att=1.0, K_rep=1.0, THR=0.6, KP_rot=1.0, KP_fwd=2.0)
+        PF = PotentialField(K_att=5.0, K_rep=5.0, THR=0.6, KP_rot=4.0, KP_fwd=2.0)
 
         pioneer_positions = []
         distance_to_goal = float('inf')
-        while distance_to_goal >.1:            
+        while distance_to_goal >.25:            
             pioneer_position = self.sim.getObjectPosition(self.pioneer, -1)[:-1]
             pioneer_orientation = self.sim.getObjectOrientation(self.pioneer, -1)[2]
             pioneer_positions.append(pioneer_position)
 
-            v_l, v_r, distance_to_goal = PF.p_field(pioneer_position, goal_position, block_positions, pioneer_orientation) 
-    
+            v_l, v_r, distance_to_goal, fwd_speed = PF.p_field(pioneer_position, goal_position, block_positions, pioneer_orientation) 
+            speeds.append(fwd_speed)
+            # speeds.append(self.sim.getVelocity(self.pioneer))
             self.sim.setJointTargetVelocity(self.left_motor,v_l)
             self.sim.setJointTargetVelocity(self.right_motor, v_r)
             self.sim.step()
@@ -105,10 +110,10 @@ class Simulator:
                 else:
                     preds.append(0)
                     PF.mod_thr(0) #decrease THR
-                thresholds.append(PF.THR)
+            thresholds.append(PF.THR)
         self.sim.stopSimulation()
         time.sleep(2)
-        return pioneer_positions, block_positions, goal_position, np.array(preds), np.array(thresholds)
+        return pioneer_positions, block_positions, goal_position, np.array(preds), np.array(thresholds), np.array(speeds)
 
 
     def init_csv(self, log_filename, block_positions):
@@ -210,9 +215,10 @@ class PotentialField:
 
     def mod_thr(self, mode):
         if mode == 1:  # increase THR
-            self.THR += 0.4
+            self.THR = min(self.THR* 1.03, 2.0)
+            # self.THR += 0.4
         elif mode == 0:  # decrease THR
-            self.THR = max(0.1, self.THR - 0.2)
+            self.THR = max(0.1, self.THR * 0.97)
         return self.THR
 
     def attractive_force(self, robot_x, robot_y, goal_x, goal_y):
@@ -247,6 +253,7 @@ class PotentialField:
         return rot_speed_raw, angle_diff
 
     def p_field(self, pioneer_position, goal_position, block_positions, pioneer_orientation):
+        repulsion_active = False
         dx = goal_position[0] - pioneer_position[0]
         dy = goal_position[1] - pioneer_position[1]
         distance_to_goal = np.sqrt(dx**2 + dy**2)
@@ -257,15 +264,22 @@ class PotentialField:
             fx_rep, fy_rep = self.repulsive_force(pioneer_position[0], pioneer_position[1], ox, oy)
             fx_rep_total += fx_rep
             fy_rep_total += fy_rep
+            if fx_rep != 0.0 or fy_rep != 0.0:
+                repulsion_active = True   
         fx_total = fx_attr + fx_rep_total
         fy_total = fy_attr + fy_rep_total
+        
         rot_speed_raw, angle_diff = self.compute_angle(fx_total, fy_total, pioneer_orientation)
         rot_speed = rot_speed_raw 
+
 
         # Speed avanti
         fwd_speed = self.KP_fwd * np.exp(-2 * abs(angle_diff))
 
+        if not repulsion_active:
+            fwd_speed *= 5
+
         L = 0.4
         v_l = fwd_speed - rot_speed * L / 2
         v_r = fwd_speed + rot_speed * L / 2
-        return v_l, v_r, distance_to_goal   
+        return v_l, v_r, distance_to_goal, fwd_speed

@@ -8,3 +8,4 @@ plot_traj.py
 *.npy
 *.zip
 output/*
+simulation_data_online/*
