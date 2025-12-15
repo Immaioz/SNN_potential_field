@@ -2,7 +2,9 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
+import requests
 from snnae import SAE
+from config import BOT_TOKEN, CHAT_ID
 
 class utils:
     # @staticmethod
@@ -16,6 +18,7 @@ class utils:
     # @staticmethod
     # def preprocess_predict(image):
     #     return np.expand_dims(utils.preprocess(tf.keras.applications.vgg19.preprocess_input(image)), axis=0)
+
 
 
     def load_model(path, num_inputs=800, num_hidden=500, num_outputs=800, num_steps=25, beta=0.95):
@@ -83,71 +86,82 @@ class utils:
             plt.show()
 
 
-    def plot_thr(thr, save=False, path=None):
-        plt.figure(figsize=(10,10))
-        plt.plot(thr)
-        plt.title("Threshold decay")
-        plt.xlabel("Steps")
-        plt.ylabel("Threshdold")
-        plt.tight_layout()
-        if save:
-            plt.savefig(path)
-        else:
-            plt.show()
+        def plot_thr(thr, save=False, path=None):
+            plt.figure(figsize=(10,10))
+            plt.plot(thr)
+            plt.title("Threshold decay")
+            plt.xlabel("Steps")
+            plt.ylabel("Threshdold")
+            plt.tight_layout()
+            if save:
+                plt.savefig(path)
+            else:
+                plt.show()
 
-    def plot_speed(speed, save=False, path=None):
-        plt.figure(figsize=(10,10))
-        plt.plot(speed)
-        plt.title("Speed evolution")
-        plt.xlabel("Steps")
-        plt.ylabel("Speed")
-        plt.tight_layout()
-        if save:
-            plt.savefig(path)
-        else:
-            plt.show()
+        def plot_speed(speed, save=False, path=None):
+            plt.figure(figsize=(10,10))
+            plt.plot(speed)
+            plt.title("Speed evolution")
+            plt.xlabel("Steps")
+            plt.ylabel("Speed")
+            plt.tight_layout()
+            if save:
+                plt.savefig(path)
+            else:
+                plt.show()
 
-    def plot_tot(pioneer_positions, preds, thr, speed, save=False, path=None):
+    def plot_tot(pioneer_positions, preds, thr, speed, arrival, save=False, path=None):
         fig, axes = plt.subplots(
             3, 1,
             figsize=(10, 10),
             gridspec_kw={'height_ratios': [0.3, 0.3, 0.3]}
         )
 
-        ax = axes[0]
+        
         frames = np.arange(len(pioneer_positions)-1)
         y_line = np.zeros_like(frames)
-
+        x_ticks = np.arange(0, len(pioneer_positions), step=100)
+        
+        ax = axes[0]
         ax.plot(frames, y_line, '-', color='black', alpha=0.5)
-
+        if arrival is not None:
+            ax.axvline(arrival+1, color='r', linestyle='--', label='Arrival Frame')
         anom_idx = np.where(preds == 1)[0]
-
         ax.plot(anom_idx, np.zeros_like(anom_idx), 'ro')
-
         ax.set_yticks([])
+        ax.set_xticks(x_ticks)
         ax.set_xlabel("Steps")
         ax.set_title("Anomaly timeline")
-
-
         ax.set_title("Anomaly events along trajectory")
 
         ax = axes[1]
-
         if isinstance(thr, float):
             thr = np.full(len(pioneer_positions), thr)
         ax.plot(thr)
         ax.set_title("Threshold decay")
         ax.set_xlabel("Steps")
         ax.set_ylabel("Threshold")
+        ax.set_xticks(x_ticks)
+        if arrival is not None:
+            ax.axvline(arrival+1, color='r', linestyle='--', label='Arrival Frame')
 
         ax = axes[2]
         ax.plot(speed)
         ax.set_title("Speed evolution")
         ax.set_xlabel("Steps")
         ax.set_ylabel("Speed")
+        ax.set_xticks(x_ticks)
+        if arrival is not None:
+            ax.axvline(arrival+1, color='r', linestyle='--', label='Arrival Frame')
 
         plt.tight_layout()
         if save:
             plt.savefig(path)
         else:
             plt.show()
+
+
+    def send_telegram(msg):
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        payload = {"chat_id": CHAT_ID, "text": msg}
+        requests.post(url, data=payload)
