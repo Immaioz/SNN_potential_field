@@ -86,29 +86,29 @@ class utils:
             plt.show()
 
 
-        def plot_thr(thr, save=False, path=None):
-            plt.figure(figsize=(10,10))
-            plt.plot(thr)
-            plt.title("Threshold decay")
-            plt.xlabel("Steps")
-            plt.ylabel("Threshdold")
-            plt.tight_layout()
-            if save:
-                plt.savefig(path)
-            else:
-                plt.show()
+    def plot_thr(thr, save=False, path=None):
+        plt.figure(figsize=(10,10))
+        plt.plot(thr)
+        plt.title("Threshold decay")
+        plt.xlabel("Steps")
+        plt.ylabel("Threshdold")
+        plt.tight_layout()
+        if save:
+            plt.savefig(path)
+        else:
+            plt.show()
 
-        def plot_speed(speed, save=False, path=None):
-            plt.figure(figsize=(10,10))
-            plt.plot(speed)
-            plt.title("Speed evolution")
-            plt.xlabel("Steps")
-            plt.ylabel("Speed")
-            plt.tight_layout()
-            if save:
-                plt.savefig(path)
-            else:
-                plt.show()
+    def plot_speed(speed, save=False, path=None):
+        plt.figure(figsize=(10,10))
+        plt.plot(speed)
+        plt.title("Speed evolution")
+        plt.xlabel("Steps")
+        plt.ylabel("Speed")
+        plt.tight_layout()
+        if save:
+            plt.savefig(path)
+        else:
+            plt.show()
 
     def plot_tot(pioneer_positions, preds, thr, speed, arrival, save=False, path=None):
         fig, axes = plt.subplots(

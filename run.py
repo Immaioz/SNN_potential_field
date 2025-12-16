@@ -69,15 +69,15 @@ def main():
         else:
             results_dict = simulator.run()
         
-        utils.plot_trajectory(results_dict['pioneer_pos'], results_dict['block_pos'], results_dict['goal_pos'], results_dict['preds'], save=True, path = os.path.join(run_path, f"trajectory.png"))
+        utils.plot_trajectory(results_dict['pioneer_positions'], results_dict['block_positions'], results_dict['goal_position'], results_dict['preds'], save=True, path = os.path.join(run_path, f"trajectory.png"))
         utils.plot_thr(results_dict['thresholds'], save=True, path = os.path.join(run_path, f"THR.png"))
-        utils.plot_speed(results_dict['speed'], save=True, path = os.path.join(run_path, f"speed.png"))
-        utils.plot_tot(results_dict['pioneer_pos'], results_dict['preds'], results_dict['thresholds'], results_dict['speed'], results_dict.get('arrival', None), save=True, path = os.path.join(run_path, f"resume.png"))
+        utils.plot_speed(results_dict['speeds'], save=True, path = os.path.join(run_path, f"speed.png"))
+        utils.plot_tot(results_dict['pioneer_positions'], results_dict['preds'], results_dict['thresholds'], results_dict['speeds'], results_dict["arrival"], save=True, path = os.path.join(run_path, f"resume.png"))
 
         np.savez_compressed(os.path.join(run_path, f"simulation_data.npz"),
-                            pioneer_pos=results_dict['pioneer_pos'],
-                            block_pos=results_dict['block_pos'],
-                            goal_pos=results_dict['goal_pos'],
+                            pioneer_pos=results_dict['pioneer_positions'],
+                            block_pos=results_dict['block_positions'],
+                            goal_pos=results_dict['goal_position'],
                             preds=results_dict['preds'],
                             thresholds=results_dict['thresholds'],
                             speeds=results_dict['speed'])
@@ -86,15 +86,15 @@ def main():
         os.path.join(run_path, "simulation_data_dict.npz"),**results_dict)
 
         if args.comparison:
-            utils.plot_trajectory(twin_results_dict['pioneer_pos'], twin_results_dict['block_pos'], twin_results_dict['goal_pos'], twin_results_dict['preds'], save=True, path = os.path.join(run_path, f"trajectory_twin.png"))
+            utils.plot_trajectory(twin_results_dict['pioneer_positions'], twin_results_dict['block_positions'], twin_results_dict['goal_position'], twin_results_dict['preds'], save=True, path = os.path.join(run_path, f"trajectory_twin.png"))
             utils.plot_thr(twin_results_dict['thresholds'], save=True, path = os.path.join(run_path, f"THR_twin.png"))
-            utils.plot_speed(twin_results_dict['speed'], save=True, path = os.path.join(run_path, f"speed_twin.png"))
-            utils.plot_tot(twin_results_dict['pioneer_pos'], twin_results_dict['preds'], twin_results_dict['thresholds'], twin_results_dict['speed'], twin_results_dict.get('arrival', None), save=True, path = os.path.join(run_path, f"resume_twin.png"))
+            utils.plot_speed(twin_results_dict['speeds'], save=True, path = os.path.join(run_path, f"speed_twin.png"))
+            utils.plot_tot(twin_results_dict['pioneer_positions'], twin_results_dict['preds'], twin_results_dict['thresholds'], twin_results_dict['speeds'], twin_results_dict["arrival"], save=True, path = os.path.join(run_path, f"resume_twin.png"))
 
             np.savez_compressed(os.path.join(run_path, f"simulation_data_twin.npz"),
-                                pioneer_pos=twin_results_dict['pioneer_pos'],
-                                block_pos=twin_results_dict['block_pos'],
-                                goal_pos=twin_results_dict['goal_pos'],
+                                pioneer_pos=twin_results_dict['pioneer_positions'],
+                                block_pos=twin_results_dict['block_positions'],
+                                goal_pos=twin_results_dict['goal_position'],
                                 preds=twin_results_dict['preds'],
                                 thresholds=twin_results_dict['thresholds'],
                                 speeds=twin_results_dict['speed'])
