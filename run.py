@@ -51,8 +51,8 @@ def main():
         THR_base = 0.01087567
         simulator = Simulator(
             num_run=run,
-            scene_path=scene_path if args.comparison else 'C:/Users/User/Desktop/PField/potential_fields_sim.ttt',
-            # scene_path=scene_path if args.comparison else 'C:\\Users\\anton\\Documents\\PhD\\Spiking\\PotentialField_Sim\\potential_fields_sim.ttt',
+            # scene_path=scene_path if args.comparison else 'C:/Users/User/Desktop/PField/potential_fields_sim.ttt',
+            scene_path=scene_path if args.comparison else 'C:\\Users\\anton\\Documents\\PhD\\Spiking\\PotentialField_Sim\\potential_fields_sim.ttt',
             seed=seeds,
             num_blocks=20,
             min_distance=2.0,
@@ -72,7 +72,7 @@ def main():
         utils.plot_trajectory(results_dict['pioneer_positions'], results_dict['block_positions'], results_dict['goal_position'], results_dict['preds'], save=True, path = os.path.join(run_path, f"trajectory.png"))
         utils.plot_thr(results_dict['thresholds'], save=True, path = os.path.join(run_path, f"THR.png"))
         utils.plot_speed(results_dict['speeds'], save=True, path = os.path.join(run_path, f"speed.png"))
-        utils.plot_tot(results_dict['pioneer_positions'], results_dict['preds'], results_dict['thresholds'], results_dict['speeds'], results_dict["arrival"], save=True, path = os.path.join(run_path, f"resume.png"))
+        utils.plot_tot(results_dict['pioneer_positions'], results_dict['preds'], results_dict['thresholds'], results_dict['speeds'], results_dict["arrival_frame"], save=True, path = os.path.join(run_path, f"summary.png"))
 
         np.savez_compressed(os.path.join(run_path, f"simulation_data.npz"),
                             pioneer_pos=results_dict['pioneer_positions'],
@@ -89,7 +89,7 @@ def main():
             utils.plot_trajectory(twin_results_dict['pioneer_positions'], twin_results_dict['block_positions'], twin_results_dict['goal_position'], twin_results_dict['preds'], save=True, path = os.path.join(run_path, f"trajectory_twin.png"))
             utils.plot_thr(twin_results_dict['thresholds'], save=True, path = os.path.join(run_path, f"THR_twin.png"))
             utils.plot_speed(twin_results_dict['speeds'], save=True, path = os.path.join(run_path, f"speed_twin.png"))
-            utils.plot_tot(twin_results_dict['pioneer_positions'], twin_results_dict['preds'], twin_results_dict['thresholds'], twin_results_dict['speeds'], twin_results_dict["arrival"], save=True, path = os.path.join(run_path, f"resume_twin.png"))
+            utils.plot_tot(twin_results_dict['pioneer_positions'], twin_results_dict['preds'], twin_results_dict['thresholds'], twin_results_dict['speeds'], twin_results_dict["arrival_frame"], save=True, path = os.path.join(run_path, f"summary_twin.png"))
 
             np.savez_compressed(os.path.join(run_path, f"simulation_data_twin.npz"),
                                 pioneer_pos=twin_results_dict['pioneer_positions'],

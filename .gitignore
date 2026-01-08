@@ -10,3 +10,4 @@ plot_traj.py
 output/*
 simulation_data_online/*
 config.py
+simulation_data_comparison/*    
