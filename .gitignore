@@ -10,4 +10,8 @@ plot_traj.py
 output/*
 simulation_data_online/*
 config.py
-simulation_data_comparison/*    
+simulation_data_comparison/*
+papers/*
+scenes/*
+.vscode/*
+New.ipynb

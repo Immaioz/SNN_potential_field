@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 import requests
-from snnae import SAE
+from snnae import SAE, AE
 from config import BOT_TOKEN, CHAT_ID
 
 class utils:
@@ -23,6 +23,14 @@ class utils:
 
     def load_model(path, num_inputs=800, num_hidden=500, num_outputs=800, num_steps=25, beta=0.95):
         model = SAE(num_inputs=num_inputs, num_hidden=num_hidden, num_outputs=num_outputs, num_steps=num_steps, beta=beta)
+        checkpoint = torch.load(path)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        # self.load_state_dict(torch.load(path))
+        return model
+    
+
+    def load_model_AE(path, num_inputs=800, num_hidden=500, num_outputs=800):
+        model = AE(num_inputs=num_inputs, num_hidden=num_hidden, num_outputs=num_outputs)
         checkpoint = torch.load(path)
         model.load_state_dict(checkpoint['model_state_dict'])
         # self.load_state_dict(torch.load(path))
@@ -85,6 +93,8 @@ class utils:
         else:
             plt.show()
 
+        plt.close()
+
 
     def plot_thr(thr, save=False, path=None):
         plt.figure(figsize=(10,10))
@@ -97,6 +107,8 @@ class utils:
             plt.savefig(path)
         else:
             plt.show()
+        plt.close()
+
 
     def plot_speed(speed, save=False, path=None):
         plt.figure(figsize=(10,10))
@@ -109,6 +121,7 @@ class utils:
             plt.savefig(path)
         else:
             plt.show()
+        plt.close()
 
     def plot_tot(pioneer_positions, preds, thr, speed, arrival, save=False, path=None):
         fig, axes = plt.subplots(
@@ -160,6 +173,7 @@ class utils:
         else:
             plt.show()
 
+        plt.close()
 
     def send_telegram(msg):
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"

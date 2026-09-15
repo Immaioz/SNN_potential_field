@@ -1,112 +1,131 @@
-
+import os
+import shutil
+import numpy as np
+from tqdm import tqdm
+import argparse
 from simulator import Simulator
 from utils import utils
-from coppeliasim_zmqremoteapi_client import RemoteAPIClient
-import time
-import csv
-import os
-import numpy as np
-import cv2
-from tqdm import tqdm
-import matplotlib.pyplot as plt
-import argparse
-import os
-import requests
-import time
+
+
+def setup_config(args):
+    config = {
+        'test': args.test,
+        'online': False,
+        'model': None,
+        'model_class': None,
+        'seed': 4,
+        'scene_path': 'D:/Antonino/PField/potential_fields_sim.ttt',
+        'save_path': './simulation_data_train_new',
+        'THR_base': 0.020,
+        'THR_base_class': 0.06581877,
+    }
+    if args.test:
+        config.update({
+            'online': True,
+            'model': utils.load_model("REV_SpikingAE_opt.pth", num_inputs=800, num_outputs=800, num_hidden=384),
+            'seed': 22,
+            'scene_path': '/home/nino/PhD/Spiking/PotentialField_Sim/scenes/REV_potential_fields_sim.ttt',
+            'save_path': 'simulation_data/REV_online_test',
+        })
+    if args.comparison:
+        config.update({
+            'online': True,
+            'model': utils.load_model("SpikingAE_opt_1.pth", num_inputs=800, num_outputs=800, num_hidden=384),
+            'seed': 17,
+            'scene_path': '/home/nino/PhD/Spiking/PotentialField_Sim/scenes/REV_potential_fields_sim_comparison.ttt',
+            'save_path': './REV_simulation_data_opt',
+        })
+    if args.three_mode:
+        config.update({
+            'online': True,
+            'model': utils.load_model("SpikingAE_opt_2.pth", num_inputs=800, num_outputs=800, num_hidden=384),
+            'model_class': utils.load_model_AE("NN_AE_opt_2.pth", num_inputs=800, num_outputs=800, num_hidden=384),
+            'seed': 17,
+            'scene_path': 'D:/Antonino/PField/potential_fields_sim_comparison_3.ttt',
+            'save_path': './REV_simulation_data_opt_three',
+        })
+    return config
+
+
+def save_robot_results(results, run_path, suffix=""):
+    utils.plot_trajectory(results['pioneer_positions'], results['block_positions'],
+                          results['goal_position'], results['preds'],
+                          save=True, path=os.path.join(run_path, f"trajectory{suffix}.png"))
+    utils.plot_thr(results['thresholds'], save=True,
+                   path=os.path.join(run_path, f"THR{suffix}.png"))
+    utils.plot_speed(results['speeds'], save=True,
+                     path=os.path.join(run_path, f"speed{suffix}.png"))
+    utils.plot_tot(results['pioneer_positions'], results['preds'], results['thresholds'],
+                   results['speeds'], results['arrival_frame'],
+                   save=True, path=os.path.join(run_path, f"summary{suffix}.png"))
+    np.savez_compressed(os.path.join(run_path, f"simulation_data_dict{suffix}.npz"), **results)
+
+
+def zip_frames(run_path, run, suffix=""):
+    frames_path = os.path.join(run_path, f"frames_run{run}{suffix}")
+    if os.path.exists(frames_path):
+        shutil.make_archive(frames_path, 'zip', frames_path)
+        shutil.rmtree(frames_path)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--num_run", type=int, required=True,
                         help="Numero di run della simulazione")
-    parser.add_argument("--test", action="store_true", default=False,
+    parser.add_argument("--test", action="store_true",
                         help="Testing with online loop")
-    parser.add_argument("--comparison", action="store_true", default=False,
+    parser.add_argument("--comparison", action="store_true",
                         help="Test comparison between online and offline")
+    parser.add_argument("--three_mode", action="store_true",
+                        help="Test comparison between online, offline and classical AE")
     args = parser.parse_args()
 
-    save_path = './simulation_data_online' if args.test else './simulation_data'
-    os.makedirs(save_path, exist_ok=True)
-    if args.test:
-        online = True
-        model = utils.load_model("SpikingAE_new.pth")
-        np.random.seed(22) 
-        seeds = np.random.randint(1, 1000, size=args.num_run)
-    else:
-        online = False
-        model = None
-        seeds = [5, 26, 33, 58, 91, 73, 88, 12, 5, 39, 47, 61, 79, 84, 95, 14, 27, 42, 22, 17]
+    config = setup_config(args)
+    np.random.seed(config['seed'])
+    seeds = np.random.randint(1, 1000, size=args.num_run)
+    seeds = [642]
+    os.makedirs(config['save_path'], exist_ok=True)
+    print("Starting...")
 
-    if args.comparison:
-        online = True
-        model = utils.load_model("SpikingAE_new.pth")
-        np.random.seed(22) 
-        seeds = np.random.randint(1, 1000, size=args.num_run)
-        scene_path='C:/Users/User/Desktop/PField/potential_fields_sim_comparison.ttt'
+    suffixes = ['', '_twin', '_class']
+    for decay in [0.1]:
+        for i, run in enumerate(tqdm(range(args.num_run), desc="Simulation Runs")):
+            run_path = os.path.join(config['save_path'],
+                                    f"Run_{run:04d}_Seed_{seeds[i]}_rate_{str(decay).replace('.', '_')}")
+            os.makedirs(run_path, exist_ok=True)
 
+            simulator = Simulator(
+                num_run=run,
+                scene_path=config['scene_path'],
+                seed=seeds,
+                num_blocks=20,
+                min_distance=2.5,
+                min_goal_distance=8.0,
+                save_path=run_path,
+                online=config['online'],
+                model=config['model'],
+                THR_base=config['THR_base'],
+                comparison=args.comparison,
+                three_mode=args.three_mode,
+                model_class=config['model_class'],
+                THR_base_class=config['THR_base_class'],
+                decay_rate=decay,
+            )
 
-    for i, run in enumerate(tqdm(range(args.num_run), desc="Simulation Runs")):
-        run_path = os.path.join(save_path, f"Run_{run}_Seed_{seeds[i]}")
-        os.makedirs(run_path, exist_ok=True)
-        THR_base = 0.01087567
-        simulator = Simulator(
-            num_run=run,
-            # scene_path=scene_path if args.comparison else 'C:/Users/User/Desktop/PField/potential_fields_sim.ttt',
-            scene_path=scene_path if args.comparison else 'C:\\Users\\anton\\Documents\\PhD\\Spiking\\PotentialField_Sim\\potential_fields_sim.ttt',
-            seed=seeds,
-            num_blocks=20,
-            min_distance=2.0,
-            min_goal_distance=8.0,
-            save_path=run_path,
-            online=online,
-            model=model,
-            THR_base=THR_base,
-            comparison=args.comparison
-        )
+            results_list = simulator.run()
+            if not isinstance(results_list, tuple):
+                results_list = (results_list,)
 
-        if args.comparison:
-            results_dict, twin_results_dict = simulator.run()
-        else:
-            results_dict = simulator.run()
-        
-        utils.plot_trajectory(results_dict['pioneer_positions'], results_dict['block_positions'], results_dict['goal_position'], results_dict['preds'], save=True, path = os.path.join(run_path, f"trajectory.png"))
-        utils.plot_thr(results_dict['thresholds'], save=True, path = os.path.join(run_path, f"THR.png"))
-        utils.plot_speed(results_dict['speeds'], save=True, path = os.path.join(run_path, f"speed.png"))
-        utils.plot_tot(results_dict['pioneer_positions'], results_dict['preds'], results_dict['thresholds'], results_dict['speeds'], results_dict["arrival_frame"], save=True, path = os.path.join(run_path, f"summary.png"))
+            for suffix, results in zip(suffixes, results_list):
+                save_robot_results(results, run_path, suffix)
+                zip_frames(run_path, run, suffix)
 
-        np.savez_compressed(os.path.join(run_path, f"simulation_data.npz"),
-                            pioneer_pos=results_dict['pioneer_positions'],
-                            block_pos=results_dict['block_positions'],
-                            goal_pos=results_dict['goal_position'],
-                            preds=results_dict['preds'],
-                            thresholds=results_dict['thresholds'],
-                            speeds=results_dict['speed'])
-        
-        np.savez_compressed(
-        os.path.join(run_path, "simulation_data_dict.npz"),**results_dict)
+            preds = results_list[0]['preds']
+            anomalies = np.bincount(preds, minlength=2)[-1].item()
+            normal = np.bincount(preds, minlength=2)[0].item()
+            utils.send_telegram(f"Run {i} completata con {anomalies} anomalie "
+                                f"su {normal + anomalies} totali, rate {decay}")
 
-        if args.comparison:
-            utils.plot_trajectory(twin_results_dict['pioneer_positions'], twin_results_dict['block_positions'], twin_results_dict['goal_position'], twin_results_dict['preds'], save=True, path = os.path.join(run_path, f"trajectory_twin.png"))
-            utils.plot_thr(twin_results_dict['thresholds'], save=True, path = os.path.join(run_path, f"THR_twin.png"))
-            utils.plot_speed(twin_results_dict['speeds'], save=True, path = os.path.join(run_path, f"speed_twin.png"))
-            utils.plot_tot(twin_results_dict['pioneer_positions'], twin_results_dict['preds'], twin_results_dict['thresholds'], twin_results_dict['speeds'], twin_results_dict["arrival_frame"], save=True, path = os.path.join(run_path, f"summary_twin.png"))
-
-            np.savez_compressed(os.path.join(run_path, f"simulation_data_twin.npz"),
-                                pioneer_pos=twin_results_dict['pioneer_positions'],
-                                block_pos=twin_results_dict['block_positions'],
-                                goal_pos=twin_results_dict['goal_position'],
-                                preds=twin_results_dict['preds'],
-                                thresholds=twin_results_dict['thresholds'],
-                                speeds=twin_results_dict['speed'])
-            
-            np.savez_compressed(
-            os.path.join(run_path, "simulation_data_dict_twin.npz"),**twin_results_dict)   
-
-        
-        anomalies = np.bincount(results_dict['preds'])[-1].item()
-        normal = np.bincount(results_dict['preds'])[0].item()
-        msg = f"Run {i} completata con {anomalies} anomalie su {normal+anomalies} totali"
-        utils.send_telegram(msg)
 
 if __name__ == "__main__":
     main()
