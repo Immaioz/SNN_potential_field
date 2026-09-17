@@ -202,7 +202,43 @@ class Simulator:
                     accepted = (dirn, nx, ny)
                     break
             if accepted is None:
-                continue
+                # Flee instead of stopping: scan candidate directions and pick
+                # the one that maximizes the distance from the robot, while
+                # keeping the goal margin where possible.
+                angles = np.linspace(0, 2 * np.pi, 72, endpoint=False)
+                best = None
+                for angle in angles:
+                    d = np.array([np.cos(angle), np.sin(angle)])
+                    tx = bx + d[0] * self.obstacle_step
+                    ty = by + d[1] * self.obstacle_step
+                    d, tx, ty = _bounce(tx, ty, d)
+                    g_dist = np.hypot(tx - goal[0], ty - goal[1])
+                    if g_dist <= margin:
+                        continue
+                    if best is None:
+                        best = (d, tx, ty)
+                        best_r = np.hypot(tx - robot_pos[0], ty - robot_pos[1])
+                    else:
+                        r_dist = np.hypot(tx - robot_pos[0], ty - robot_pos[1])
+                        if r_dist > best_r:
+                            best = (d, tx, ty)
+                            best_r = r_dist
+                if best is None:
+                    # Boxed near the goal: still flee the robot.
+                    best = None
+                    best_r = -1.0
+                    for angle in angles:
+                        d = np.array([np.cos(angle), np.sin(angle)])
+                        tx = bx + d[0] * self.obstacle_step
+                        ty = by + d[1] * self.obstacle_step
+                        d, tx, ty = _bounce(tx, ty, d)
+                        r_dist = np.hypot(tx - robot_pos[0], ty - robot_pos[1])
+                        if r_dist > best_r:
+                            best = (d, tx, ty)
+                            best_r = r_dist
+                if best is None:
+                    continue
+                accepted = (best[0], best[1], best[2])
             dirn, nx, ny = accepted
             self._obstacle_dirs[key] = dirn
             self._obstacle_moves[key] = moves + 1
