@@ -16,8 +16,9 @@ def setup_config(args):
         'seed': 4,
         'scene_path': 'D:/Antonino/PField/potential_fields_sim.ttt',
         'save_path': './simulation_data_train_new',
-        'THR_base': 0.020,
+        'THR_base': 0.02,
         'THR_base_class': 0.06581877,
+        'decay_factor': 0.99,
     }
     if args.test:
         config.update({
@@ -83,7 +84,7 @@ def main():
     config = setup_config(args)
     np.random.seed(config['seed'])
     seeds = np.random.randint(1, 1000, size=args.num_run)
-    seeds = [642]
+    seeds = [144, 391]
     os.makedirs(config['save_path'], exist_ok=True)
     print("Starting...")
 
@@ -110,6 +111,7 @@ def main():
                 model_class=config['model_class'],
                 THR_base_class=config['THR_base_class'],
                 decay_rate=decay,
+                decay_factor=config['decay_factor'],
             )
 
             results_list = simulator.run()

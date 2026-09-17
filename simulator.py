@@ -26,7 +26,7 @@ class _RobotState:
 
 
 class Simulator:
-    def __init__(self, scene_path, seed, num_blocks, min_distance, min_goal_distance, stepping=True, save_path='./simulation_data', num_run=1, online=False, model=None, THR_base=0.1, comparison=False, three_mode=False, model_class=None, THR_base_class=0.06012838, decay_rate=0.3):
+    def __init__(self, scene_path, seed, num_blocks, min_distance, min_goal_distance, stepping=True, save_path='./simulation_data', num_run=1, online=False, model=None, THR_base=0.1, comparison=False, three_mode=False, model_class=None, THR_base_class=0.06012838, decay_rate=0.3, decay_factor=None):
         self.client = RemoteAPIClient()
         self.sim = self.client.getObject('sim')
         self.scene_path = scene_path
@@ -45,6 +45,7 @@ class Simulator:
         self.model_class = model_class
         self.THR_base_class = THR_base_class
         self.decay_rate = decay_rate
+        self.decay_factor = decay_factor
 
     def init_scene(self):
         if self.num_run == 0:
@@ -52,6 +53,7 @@ class Simulator:
             while self.sim.getSimulationState() != self.sim.simulation_stopped:
                 pass
             self.sim.loadScene(self.scene_path)
+        self.sim.setBoolProperty(self.sim.handle_scene, 'ode.quickStepEnabled', False)
         self.sim.startSimulation()
 
         self.handle = self._init_handle('')
@@ -80,7 +82,7 @@ class Simulator:
         self.sim.setStepping(self.stepping)
         robots = self._setup_robots()
         num_steps = 1 if not (self.comparison or self.three_mode) else 1
-        obstacle_threshold = 0.052 if self.comparison and not self.three_mode else 0.07
+        obstacle_threshold = 0.5 if self.comparison and not self.three_mode else 0.5
         self._run_loop(robots, self.num_run, num_steps=num_steps, obstacle_threshold=obstacle_threshold)
         self.sim.stopSimulation()
         time.sleep(2)
@@ -113,7 +115,7 @@ class Simulator:
         self.init_csv(log_filename, results['block_positions'])
         os.makedirs(frame_dir, exist_ok=True)
 
-        PF = PotentialField(K_att=10.0, K_rep=5.0, THR=0.6, KP_rot=4.0, KP_fwd=2.0, rate=self.decay_rate)
+        PF = PotentialField(K_att=10.0, K_rep=3.0, THR=0.6, KP_rot=4.0, KP_fwd=2.0, rate=self.decay_rate, decay_factor=self.decay_factor)
         return _RobotState(handle, results, PF, frame_dir, log_filename,
                            run_inference=run_inference, THR_base=THR_base or self.THR_base)
 
@@ -158,8 +160,18 @@ class Simulator:
                     self._run_inference(r.results, r.handle, sensors_vals, r.PF, r.THR_base)
 
                 r.results['thresholds'].append(r.PF.THR)
-                r.results['obstacle_hit'].append(
-                    1 if any(0 < v < obstacle_threshold for v in sensors_vals) else 0)
+                det = min((v for v in sensors_vals if 0 < v < obstacle_threshold), default=None)
+                hit = 0
+                if det is not None and len(r.results['pioneer_positions']) >= 2:
+                    disp = np.array(pos) - np.array(r.results['pioneer_positions'][-2])
+                    if np.hypot(*disp) > 1e-9:
+                        patch = r.PF.obstacle_half_size + r.PF.robot_radius
+                        for bx, by in r.results['block_positions']:
+                            to_obs = np.array([bx - pos[0], by - pos[1]])
+                            if np.hypot(*to_obs) - patch <= obstacle_threshold + 0.1 and np.dot(disp, to_obs) > 0:
+                                hit = 1
+                                break
+                r.results['obstacle_hit'].append(hit)
 
     def _run_inference(self, results, handle, sensors_vals, PF, THR_base):
         X_total = self.extract_SNN_inputs(handle, sensors_vals)
@@ -249,7 +261,7 @@ class Simulator:
         return cv2.cvtColor(self._read_image(handle), cv2.COLOR_RGB2GRAY)
 
     def save_frame(self, frame_dir, frame_id, handle):
-        img_bgr = cv2.cvtColor(self._read_image(handle), cv2.COLOR_RGB2BGR)
+        img_bgr = self._read_image(handle)
         filename = os.path.join(frame_dir, f"frame_{frame_id:04d}.png")
         cv2.imwrite(filename, img_bgr)
         return img_bgr, filename
@@ -309,14 +321,14 @@ class Simulator:
 
 
 class PotentialField:
-    def __init__(self, K_att=1.0, K_rep=100.0, THR=1.0, KP_rot=1.0, KP_fwd=1.0, rate=0.03):
+    def __init__(self, K_att=1.0, K_rep=100.0, THR=1.0, KP_rot=1.0, KP_fwd=1.0, rate=0.03, decay_factor=None):
         self.K_att = K_att
         self.K_rep = K_rep
         self.THR = THR
         self.KP_rot = KP_rot
         self.KP_fwd = KP_fwd
         self.increase_rate = 1 + rate
-        self.decay_rate = 1 - rate
+        self.decay_rate = 1 - rate if decay_factor is None else decay_factor
         self.obstacle_half_size = 0.25
         self.robot_radius = 0.2
 
@@ -336,9 +348,10 @@ class PotentialField:
         h = self.obstacle_half_size + self.robot_radius
         cx = np.clip(robot_x, obstacle_x - h, obstacle_x + h)
         cy = np.clip(robot_y, obstacle_y - h, obstacle_y + h)
-        dx = robot_x - cx
-        dy = robot_y - cy
+        dx = robot_x - obstacle_x #cx
+        dy = robot_y - obstacle_y #cy
         dist_to_obstacle = np.sqrt(dx**2 + dy**2)
+        dist_to_obstacle -= .35
 
         if dist_to_obstacle < self.THR:
             factor = self.K_rep * (1.0 / dist_to_obstacle - 1.0 / self.THR) * (1.0 / (dist_to_obstacle**2))

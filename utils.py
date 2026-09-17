@@ -48,7 +48,7 @@ class utils:
     def to_grayscale(image):
         return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
-    def plot_trajectory(pioneer_positions, block_positions, goal_position, preds, save=False, path=None):
+    def plot_trajectory(pioneer_positions, block_positions, goal_position, preds, save=False, path=None, robot_size=(0.5, 0.4), robot_every=30, sensor_values=None, obstacles_hit=None):
         plt.figure(figsize=(10, 10))
         plt.title("Traiettorie Pioneer con goal e blocchi")
         plt.xlabel("X [m]")
@@ -65,13 +65,53 @@ class utils:
         # Path 
         x_path = np.array([pos[0] for pos in pioneer_positions[1:]])
         y_path = np.array([pos[1] for pos in pioneer_positions[1:]])
-        plt.plot(x_path, y_path, '-', label='Path')
+        if sensor_values is not None:
+            sv = np.asarray(sensor_values)
+            if sv.ndim == 1 and len(sv) == len(pioneer_positions):
+                colors = sv[1:]
+            else:
+                colors = sv
+            sc = plt.scatter(x_path, y_path, c=colors, cmap='viridis', s=25,
+                             edgecolors='none', label='Distanza sensore min')
+            plt.colorbar(sc, ax=plt.gca(), label='Min distanza sensore [m]')
+        else:
+            plt.plot(x_path, y_path, '-', label='Path')
+
+        # Robot footprint (lateral sides only)
+        W, H = robot_size
+        positions = np.asarray(pioneer_positions)
+        n = len(positions)
+        step = max(1, n // robot_every) if n > 1 else 1
+        for i in range(0, n, step):
+            if i == 0:
+                a, b = 0, min(1, n - 1)
+            elif i == n - 1:
+                a, b = i - 1, i
+            else:
+                a, b = i - 1, i + 1
+            angle = np.arctan2(positions[b][1] - positions[a][1],
+                               positions[b][0] - positions[a][0])
+            fw = np.array([np.cos(angle), np.sin(angle)])
+            lt = np.array([-np.sin(angle), np.cos(angle)])
+            p = positions[i]
+            for side in (-1, 1):
+                s0 = p + (H / 2) * fw + side * (W / 2) * lt
+                s1 = p - (H / 2) * fw + side * (W / 2) * lt
+                plt.plot([s0[0], s1[0]], [s0[1], s1[1]], 'b-', linewidth=1)
 
         # Anomalie
         anom_idx = np.where(preds[:] == 1)[0] - 1  
         anom_idx = anom_idx[(anom_idx >= 0) & (anom_idx < len(x_path))] 
         if len(anom_idx) > 0:
             plt.plot(x_path[anom_idx], y_path[anom_idx], 'ro', label='Anomalie')
+
+        # Obstacles hit
+        if obstacles_hit is not None:
+            obst_idx = np.where(np.asarray(obstacles_hit) == 1)[0] - 1
+            obst_idx = obst_idx[(obst_idx >= 0) & (obst_idx < len(x_path))]
+            if len(obst_idx) > 0:
+                plt.plot(x_path[obst_idx], y_path[obst_idx], 'ms', markersize=6,
+                         label='Obstacle hit')
 
         # Goal
         plt.plot(goal_position[0], goal_position[1], 'go', markersize=12, label='Goal')
