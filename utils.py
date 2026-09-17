@@ -116,7 +116,7 @@ class utils:
         # Goal
         plt.plot(goal_position[0], goal_position[1], 'go', markersize=12, label='Goal')
 
-        # Blocchi
+        # Blocks
         for x, y in block_positions:
             rect = plt.Rectangle((x - block_size / 2, y - block_size / 2),
                                 block_size, block_size,

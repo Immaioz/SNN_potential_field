@@ -3,8 +3,14 @@ import shutil
 import numpy as np
 from tqdm import tqdm
 import argparse
-from simulator import Simulator
+from simulator import Simulator, PotentialField, AdaptiveAPFPotentialField, AdaptiveTangentialAPFPotentialField
 from utils import utils
+
+PF_REGISTRY = {
+    'PotentialField': PotentialField,
+    'AdaptiveAPF': AdaptiveAPFPotentialField,
+    'AdaptiveTangential': AdaptiveTangentialAPFPotentialField,
+}
 
 
 def setup_config(args):
@@ -39,12 +45,24 @@ def setup_config(args):
     if args.three_mode:
         config.update({
             'online': True,
-            'model': utils.load_model("SpikingAE_opt_2.pth", num_inputs=800, num_outputs=800, num_hidden=384),
-            'model_class': utils.load_model_AE("NN_AE_opt_2.pth", num_inputs=800, num_outputs=800, num_hidden=384),
+            'model': utils.load_model("REV_SpikingAE_opt.pth", num_inputs=800, num_outputs=800, num_hidden=384),
+            'model_class': None, #utils.load_model_AE("NN_AE_opt_2.pth", num_inputs=800, num_outputs=800, num_hidden=384),
             'seed': 17,
-            'scene_path': 'D:/Antonino/PField/potential_fields_sim_comparison_3.ttt',
-            'save_path': './REV_simulation_data_opt_three',
+            'scene_path': '/home/nino/PhD/Spiking/PotentialField_Sim/scenes/REV_potential_fields_sim_comparison_3.ttt',
+            'save_path': 'simulation_data/REV_simulation_data_comparison_Literature',
+            'pf_class': {
+                'base': PF_REGISTRY[args.pf_base],
+                'twin': PF_REGISTRY[args.pf_twin],
+                'class': PF_REGISTRY[args.pf_class_mode],
+            },
         })
+    elif args.comparison:
+        config['pf_class'] = {
+            'base': PF_REGISTRY[args.pf_base],
+            'twin': PF_REGISTRY[args.pf_twin],
+        }
+    else:
+        config['pf_class'] = PF_REGISTRY[args.pf_base]
     return config
 
 
@@ -72,13 +90,23 @@ def zip_frames(run_path, run, suffix=""):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--num_run", type=int, required=True,
-                        help="Numero di run della simulazione")
+                        help="Number of simulation runs")
     parser.add_argument("--test", action="store_true",
                         help="Testing with online loop")
     parser.add_argument("--comparison", action="store_true",
                         help="Test comparison between online and offline")
     parser.add_argument("--three_mode", action="store_true",
                         help="Test comparison between online, offline and classical AE")
+    parser.add_argument("--pf_base", choices=list(PF_REGISTRY), default='PotentialField',
+                        help="PF class of the base robot")
+    parser.add_argument("--pf_twin", choices=list(PF_REGISTRY), default='PotentialField',
+                        help="PF class of the twin robot (comparison/three_mode)")
+    parser.add_argument("--pf_class_mode", choices=list(PF_REGISTRY), default='PotentialField',
+                        help="PF class of the class robot (three_mode)")
+    parser.add_argument("--class_pf_only", action="store_true",
+                        help="three_mode: the class robot uses only the selected PF class, without AE inference (like twin)")
+    parser.add_argument("--moving_obstacles", action="store_true",
+                        help="Slightly move the obstacles at every simulation step")
     args = parser.parse_args()
 
     config = setup_config(args)
@@ -112,6 +140,9 @@ def main():
                 THR_base_class=config['THR_base_class'],
                 decay_rate=decay,
                 decay_factor=config['decay_factor'],
+                pf_class=config['pf_class'],
+                class_pf_only=args.class_pf_only,
+                moving_obstacles=args.moving_obstacles,
             )
 
             results_list = simulator.run()
