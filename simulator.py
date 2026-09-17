@@ -26,7 +26,7 @@ class _RobotState:
 
 
 class Simulator:
-    def __init__(self, scene_path, seed, num_blocks, min_distance, min_goal_distance, stepping=True, save_path='./simulation_data', num_run=1, online=False, model=None, THR_base=0.1, comparison=False, three_mode=False, model_class=None, THR_base_class=0.06012838, decay_rate=0.3, decay_factor=None, pf_class=None, class_pf_only=False, moving_obstacles=False, obstacle_step=0.05):
+    def __init__(self, scene_path, seed, num_blocks, min_distance, min_goal_distance, stepping=True, save_path='./simulation_data', num_run=1, online=False, model=None, THR_base=0.1, comparison=False, three_mode=False, model_class=None, THR_base_class=0.06012838, decay_rate=0.3, decay_factor=None, pf_class=None, class_pf_only=False, moving_obstacles=False, obstacle_step=0.05, obstacle_turn=0.15, obstacle_every=1, obstacle_goal_margin=2.5):
         self.client = RemoteAPIClient()
         self.sim = self.client.getObject('sim')
         self.scene_path = scene_path
@@ -56,6 +56,13 @@ class Simulator:
         self.class_pf_only = class_pf_only
         self.moving_obstacles = moving_obstacles
         self.obstacle_step = obstacle_step
+        self.obstacle_turn = obstacle_turn
+        self.obstacle_every = obstacle_every
+        self.obstacle_goal_margin = obstacle_goal_margin
+        self._obstacle_dirs = {}
+        self._obstacle_timers = {}
+        self._obstacle_moves = {}
+        self._dir_change_every = 10  # hardcoded: new preferred direction every 10 moves
 
     def _resolve_pf_class(self, variant):
         pc = self.pf_class
@@ -142,12 +149,63 @@ class Simulator:
             return
         floor_pos = self.sim.getObjectPosition(r.handle["floor"], -1)
         z = floor_pos[2] + 0.125
+        xmin, xmax = floor_pos[0] - 13.0, floor_pos[0] + 13.0
+        ymin, ymax = floor_pos[1] - 13.0, floor_pos[1] + 13.0
         for i, block in enumerate(r.handle['blocks']):
+            key = id(block)
+            steps = self._obstacle_timers.get(key, 0) + 1
+            if steps < self.obstacle_every:
+                self._obstacle_timers[key] = steps
+                continue
+            self._obstacle_timers[key] = 0
+
+            goal = r.results['goal_position']
+            robot_pos = self.sim.getObjectPosition(r.handle["pioneer"], -1)[:-1]
+            margin = self.obstacle_goal_margin
+            robot_margin = margin - 1
+
+            def _bounce(nx, ny, d):
+                if nx < xmin or nx > xmax:
+                    d = np.array([-d[0], d[1]])
+                    nx = bx + d[0] * self.obstacle_step
+                if ny < ymin or ny > ymax:
+                    d = np.array([d[0], -d[1]])
+                    ny = by + d[1] * self.obstacle_step
+                return d, np.clip(nx, xmin, xmax), np.clip(ny, ymin, ymax)
+
+            # Obstacles move only every obstacle_every frames. Each block keeps
+            # a persistent preferred direction (initialized once at random) and
+            # drifts with small random turns, never entering the goal's margin
+            # nor the safety zone around the robot (goal margin - 1).
+            # Every _dir_change_every moves the preferred direction is reset.
+            moves = self._obstacle_moves.get(key, 0)
+            if key not in self._obstacle_dirs or (moves > 0 and moves % self._dir_change_every == 0):
+                angle = np.random.uniform(0, 2 * np.pi)
+                self._obstacle_dirs[key] = np.array([np.cos(angle), np.sin(angle)])
+
             bx, by = r.results['block_positions'][i]
-            nx = bx + np.random.uniform(-self.obstacle_step, self.obstacle_step)
-            ny = by + np.random.uniform(-self.obstacle_step, self.obstacle_step)
-            nx = np.clip(nx, floor_pos[0] - 13.0, floor_pos[0] + 13.0)
-            ny = np.clip(ny, floor_pos[1] - 13.0, floor_pos[1] + 13.0)
+            accepted = None
+            for _ in range(10):
+                dirn = self._obstacle_dirs[key]
+                turn = np.random.uniform(-self.obstacle_turn, self.obstacle_turn)
+                ct, st = np.cos(turn), np.sin(turn)
+                dirn = np.array([ct * dirn[0] - st * dirn[1],
+                                 st * dirn[0] + ct * dirn[1]])
+                dirn /= np.hypot(*dirn)
+                self._obstacle_dirs[key] = dirn
+
+                nx = bx + dirn[0] * self.obstacle_step
+                ny = by + dirn[1] * self.obstacle_step
+                dirn, nx, ny = _bounce(nx, ny, dirn)
+                if (np.hypot(nx - goal[0], ny - goal[1]) > margin
+                        and np.hypot(nx - robot_pos[0], ny - robot_pos[1]) > robot_margin):
+                    accepted = (dirn, nx, ny)
+                    break
+            if accepted is None:
+                continue
+            dirn, nx, ny = accepted
+            self._obstacle_dirs[key] = dirn
+            self._obstacle_moves[key] = moves + 1
             self.sim.setObjectPosition(block, -1, [nx, ny, z])
             r.results['block_positions'][i] = (float(nx), float(ny))
 

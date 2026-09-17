@@ -32,7 +32,7 @@ def setup_config(args):
             'model': utils.load_model("REV_SpikingAE_opt.pth", num_inputs=800, num_outputs=800, num_hidden=384),
             'seed': 22,
             'scene_path': '/home/nino/PhD/Spiking/PotentialField_Sim/scenes/REV_potential_fields_sim.ttt',
-            'save_path': 'simulation_data/REV_online_test',
+            'save_path': 'simulation_data/REV_online_test_1',
         })
     if args.comparison:
         config.update({
@@ -107,6 +107,12 @@ def main():
                         help="three_mode: the class robot uses only the selected PF class, without AE inference (like twin)")
     parser.add_argument("--moving_obstacles", action="store_true",
                         help="Slightly move the obstacles at every simulation step")
+    parser.add_argument("--obstacle_turn", type=float, default=0.15,
+                        help="Max random turn [rad] applied per step to each moving obstacle's preferred direction")
+    parser.add_argument("--obstacle_every", type=int, default=10,
+                        help="Move each obstacle one step every N frames (1 = move every frame)")
+    parser.add_argument("--obstacle_goal_margin", type=float, default=2.5,
+                        help="Minimum distance an obstacle must keep from the goal; on violation it immediately changes direction")
     args = parser.parse_args()
 
     config = setup_config(args)
@@ -143,6 +149,9 @@ def main():
                 pf_class=config['pf_class'],
                 class_pf_only=args.class_pf_only,
                 moving_obstacles=args.moving_obstacles,
+                obstacle_turn=args.obstacle_turn,
+                obstacle_every=args.obstacle_every,
+                obstacle_goal_margin=args.obstacle_goal_margin,
             )
 
             results_list = simulator.run()
