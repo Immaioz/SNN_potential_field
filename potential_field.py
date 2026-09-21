@@ -65,8 +65,8 @@ class PotentialField:
         rot_speed_raw, angle_diff = self.compute_angle(fx_total, fy_total, pioneer_orientation)
 
         fwd_speed = self.KP_fwd * np.exp(-2 * abs(angle_diff))
-        if not repulsion_active:
-            fwd_speed *= 5
+        # if not repulsion_active:
+        #     fwd_speed *= 5
 
         L = 0.4
         v_l = fwd_speed - rot_speed_raw * L / 2

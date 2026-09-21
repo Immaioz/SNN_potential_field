@@ -30,7 +30,7 @@ def setup_config(args):
         config.update({
             'online': True,
             'model': utils.load_model("REV_SpikingAE_opt.pth", num_inputs=800, num_outputs=800, num_hidden=384),
-            'seed': 22,
+            'seed': 17,
             'scene_path': '/home/nino/PhD/Spiking/PotentialField_Sim/scenes/REV_potential_fields_sim.ttt',
             'save_path': 'simulation_data/REV_online_test_2',
         })
@@ -49,7 +49,7 @@ def setup_config(args):
             'model_class': None, #utils.load_model_AE("NN_AE_opt_2.pth", num_inputs=800, num_outputs=800, num_hidden=384),
             'seed': 17,
             'scene_path': '/home/nino/PhD/Spiking/PotentialField_Sim/scenes/REV_potential_fields_sim_comparison_3.ttt',
-            'save_path': 'simulation_data/REV_simulation_data_comparison_Literature',
+            'save_path': 'simulation_data/REV_simulation_data_comparison_Literature_1',
             'pf_class': {
                 'base': PF_REGISTRY[args.pf_base],
                 'twin': PF_REGISTRY[args.pf_twin],
@@ -118,7 +118,7 @@ def main():
     config = setup_config(args)
     np.random.seed(config['seed'])
     seeds = np.random.randint(1, 1000, size=args.num_run)
-    seeds = [144, 391]
+    # seeds = [144, 391]
     os.makedirs(config['save_path'], exist_ok=True)
     print("Starting...")
 
