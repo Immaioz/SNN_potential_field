@@ -74,6 +74,7 @@ class Simulator:
         return pc or PotentialField
 
     def init_scene(self):
+        self.sim.setStepping(self.stepping)
         if self.num_run == 0:
             self.sim.stopSimulation()
             while self.sim.getSimulationState() != self.sim.simulation_stopped:
@@ -106,7 +107,6 @@ class Simulator:
 
     def run(self):
         self.init_scene()
-        self.sim.setStepping(self.stepping)
         robots = self._setup_robots()
         num_steps = 1 if not (self.comparison or self.three_mode) else 1
         obstacle_threshold = 0.5 if self.comparison and not self.three_mode else 0.5
@@ -148,6 +148,12 @@ class Simulator:
                            run_inference=run_inference, THR_base=THR_base or self.THR_base)
 
     def _move_obstacles(self, r):
+        # ==== ROBOT-AVOIDANCE CORRECTION ================================
+        # If the robot gets too close to a block, the block changes
+        # direction / flees. To DISABLE it: comment the line below
+        # "AVOID_ROBOT = True" and uncomment "AVOID_ROBOT = False".
+        AVOID_ROBOT = False
+        # AVOID_ROBOT = False
         if not self.moving_obstacles:
             return
         floor_pos = self.sim.getObjectPosition(r.handle["floor"], -1)
@@ -163,8 +169,8 @@ class Simulator:
             self._obstacle_timers[key] = 0
 
             goal = r.results['goal_position']
-            robot_pos = self.sim.getObjectPosition(r.handle["pioneer"], -1)[:-1]
             margin = self.obstacle_goal_margin
+            robot_pos = self.sim.getObjectPosition(r.handle["pioneer"], -1)[:-1] if AVOID_ROBOT else None
             robot_margin = margin - 1
 
             def _bounce(nx, ny, d):
@@ -201,10 +207,10 @@ class Simulator:
                 ny = by + dirn[1] * self.obstacle_step
                 dirn, nx, ny = _bounce(nx, ny, dirn)
                 if (np.hypot(nx - goal[0], ny - goal[1]) > margin
-                        and np.hypot(nx - robot_pos[0], ny - robot_pos[1]) > robot_margin):
+                        and (not AVOID_ROBOT or np.hypot(nx - robot_pos[0], ny - robot_pos[1]) > robot_margin)):
                     accepted = (dirn, nx, ny)
                     break
-            if accepted is None:
+            if accepted is None and AVOID_ROBOT:
                 # Flee instead of stopping: scan candidate directions and pick
                 # the one that maximizes the distance from the robot, while
                 # keeping the goal margin where possible.
@@ -242,6 +248,8 @@ class Simulator:
                 if best is None:
                     continue
                 accepted = (best[0], best[1], best[2])
+            if accepted is None:
+                continue
             dirn, nx, ny = accepted
             self._obstacle_dirs[key] = dirn
             self._obstacle_moves[key] = moves + 1
@@ -253,7 +261,6 @@ class Simulator:
         while any(not r.arrived for r in robots):
             velocities = []
             for r in robots:
-                self._move_obstacles(r)
                 pos = self.sim.getObjectPosition(r.handle["pioneer"], -1)[:-1]
                 yaw = self.sim.getObjectOrientation(r.handle["pioneer"], -1)[2]
                 r.results['pioneer_positions'].append(pos)
@@ -302,6 +309,10 @@ class Simulator:
                                 hit = 1
                                 break
                 r.results['obstacle_hit'].append(hit)
+
+                # Obstacles move after the physics step, so that block
+                # positions and robot readings are aligned to the same time.
+                self._move_obstacles(r)
 
     def _run_inference(self, results, handle, sensors_vals, PF, THR_base):
         X_total = self.extract_SNN_inputs(handle, sensors_vals)
@@ -437,6 +448,7 @@ class Simulator:
                 pos = [x, y, z - 0.125]
                 new_block = self.sim.copyPasteObjects([handle["template"]], 0)[0]
                 self.sim.setObjectPosition(new_block, -1, pos)
+                self.sim.setBoolProperty(new_block, 'dynamic', False)
                 self.sim.setShapeColor(new_block, None, self.sim.colorcomponent_ambient_diffuse, [1.0, 1.0, 1.0])
                 self.sim.setShapeColor(new_block, None, self.sim.colorcomponent_emission, [0.3, 0.3, 0.3])
                 self.sim.setObjectAlias(new_block, f"ConcretBlock#{tot_blocks}", True)

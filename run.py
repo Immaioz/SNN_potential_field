@@ -32,7 +32,7 @@ def setup_config(args):
             'model': utils.load_model("REV_SpikingAE_opt.pth", num_inputs=800, num_outputs=800, num_hidden=384),
             'seed': 22,
             'scene_path': '/home/nino/PhD/Spiking/PotentialField_Sim/scenes/REV_potential_fields_sim.ttt',
-            'save_path': 'simulation_data/REV_online_test_1',
+            'save_path': 'simulation_data/REV_online_test_2',
         })
     if args.comparison:
         config.update({
